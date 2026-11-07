@@ -51,6 +51,7 @@ private configuration out of Git.
 | Local dashboard processes initially could not bind loopback ports in the tool sandbox | Starting the API and Vite in the restricted environment returned `EPERM`. | Started them with the required local execution permission, then verified API height 3 and frontend HTTP 200. |
 | `deploy/requirements.txt` was reported missing | Commands were run from `/home/ubuntu` instead of `~/btq-core`. | Changed to `~/btq-core` before running `deploy/mesh_check.py`. The checker needs to run on only one machine with authorized SSH to all targets. |
 | Python virtual environment could not bootstrap pip | `python3-venv` was absent on node1. | Installed `python3-venv`, recreated `.venv`, installed PyYAML, and ran the checker. |
+| The node1 repository showed `.venv/` as untracked | The core fork's root `.gitignore` did not exclude local Python virtual environments. | Added `.venv/` to `.gitignore` so a future broad `git add` cannot include the environment. The separate untracked `nodesource_setup.sh` still requires operator review and must not be committed blindly. |
 | Node1 could not SSH into node2 | First, the node2 SSH host key was unknown; then public-key authentication was missing. | Verified node2's ED25519 host fingerprint with its operator, created a dedicated `btq_mesh_check` key on node1, authorized its public half on node1 and node2, and configured SSH to use it. The private half remained on node1. |
 | Node1 could not inspect Abyaan's VMs | Their host keys and authorization had not been established. | Abyaan supplied host fingerprints and authorized the public checker key. After verification, node1 could SSH into nodes 3 and 4 and the full checker passed. |
 | Initial GitHub push methods failed | Shell HTTPS had no usable credentials; the connected GitHub integration could read the repository but returned `403` for a write. | Used the operator's existing authenticated GitHub SSH identity and verified the remote branch matched the local parent before pushing deployment commit `869926f`. |
@@ -81,6 +82,9 @@ private configuration out of Git.
   IPs. Identical height alone is insufficient; compare best-block hashes.
 - `onetry` makes a one-off attempt. `addnode ... add` is runtime state;
   `addnode=` in `btq.conf` persists across daemon restart.
+- Node1 rendered a mode `0600` candidate from its live config. The reviewed
+  nonsecret settings and peers were correct, and its installed service matched
+  the committed template. The live config and service were not replaced.
 
 ## Next work
 

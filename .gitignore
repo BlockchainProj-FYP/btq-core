@@ -65,6 +65,7 @@ src/qt/btq-qt.includes
 *.rej
 *.orig
 *.pyc
+.venv/
 *.o
 *.o-*
 *.a

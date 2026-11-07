@@ -24,8 +24,10 @@ calls for six, plus a local cluster, orchestration, metrics, and enforcement.
 The checker is a connectivity and chain-consistency check, not a propagation
 latency measurement. Repository revision is not a binary attestation.
 
-**Next task:** Verify the committed config renderer with each live node's
-private config without replacing the working config. Then add a boot-managed,
+**Next task:** Verify the committed config renderer on nodes 2, 3, and 4
+without replacing their working configs. Node1 already produced a mode `0600`
+candidate with the expected nonsecret settings and an exact service-unit match.
+Then add a boot-managed,
 loopback-only dashboard service for VM 84 if that dashboard should come back
 automatically after a reboot. The first research coding milestone after that
 is a seeded, 10-minute block schedule with a saved run manifest.
@@ -51,6 +53,7 @@ whether it matches any live VM and rotate it there if it does.
 | Node service conversion | All four nodes use systemd `btqd`, telemetry flags, loopback RPC/ZMQ, and saved peers. | Service checks, port bindings, and subsequent mesh checks passed. |
 | Reboot recovery | All four nodes were reboot-tested; missing P2P host rules were corrected and saved. | Final checker `PASS` after Hussain VM reboot tests; firewall rules survived reboot. |
 | Configuration source | Secret-free renderer and exact tested service unit prepared in `deploy/`. | Renderer checks cover credential preservation, peer lists, output mode, and no overwrite; service template hash matched installed units on nodes 1 and 2. |
+| Node1 candidate review | Rendered node1's private candidate from its live config without replacing it. | Candidate mode `0600`, expected nonsecret settings and three peers, and service unit matched. |
 
 ## Update after the next task
 
