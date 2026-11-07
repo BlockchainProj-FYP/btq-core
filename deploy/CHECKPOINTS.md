@@ -26,8 +26,9 @@ calls for six, plus a local cluster, orchestration, metrics, and enforcement.
 The checker is a connectivity and chain-consistency check, not a propagation
 latency measurement. Repository revision is not a binary attestation.
 
-**Next task:** Verify the corrected mesh checker on the live four-node network,
-then build a seeded, 10-minute block schedule with a saved run manifest.
+**Next task:** Build a seeded, 10-minute block schedule with a saved run
+manifest. The corrected checker passed on the live four-node network even
+while the VMs had different documentation revisions.
 
 **Open issue:** VM 84-initiated TCP 19444 connections toward Abyaan's VMs
 timed out after reboot, although Abyaan's saved outbound connections restored
@@ -54,6 +55,7 @@ whether it matches any live VM and rotate it there if it does.
 | Node3 candidate review | Rendered a private candidate after installing PyYAML in its virtual environment. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
 | Four-node candidate review | Reviewed node4 and completed private credential comparisons on all four nodes. No live config was replaced. | All candidates mode `0600`, expected nonsecret settings and three peers, credentials matching live configs, and service units matching the committed template. |
 | VM 84 dashboard boot service | Installed a loopback-only dashboard unit from the private Frontend repository and rebooted VM 84. | Service active after reboot; API and RPC height 5, frontend HTTP 200, port 4000 on 127.0.0.1. |
+| Checker source identity fix | Compared core `src` tree and binary version instead of requiring equal documentation revisions. | Live four-node check passed: identical height 5, best hash, source tree, binary version, and three expected peer IPs each. |
 
 ## Update after the next task
 
