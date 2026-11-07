@@ -1,0 +1,51 @@
+# Shared public-IP inventory. Confirm Abyaan-owned nodes before treating it as verified.
+# RPC and dashboard ports stay on each host's loopback interface.
+nodes:
+  node1:
+    owner: Hussain
+    public_ip: 145.241.118.62
+    ssh_host: ubuntu@145.241.118.62
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18501
+    status: active
+  node2:
+    owner: Hussain
+    public_ip: 84.235.244.35
+    ssh_host: ubuntu@84.235.244.35
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18502
+    status: active
+  node3:
+    owner: Abyaan
+    public_ip: 130.210.56.76
+    ssh_host: ubuntu@130.210.56.76
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18503
+    status: active
+  node4:
+    owner: Abyaan
+    public_ip: 132.226.188.199
+    ssh_host: ubuntu@132.226.188.199
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18504
+    status: active
+  node5:
+    owner: TBD
+    public_ip: null
+    ssh_host: null
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18505
+    status: planned
+  node6:
+    owner: TBD
+    public_ip: null
+    ssh_host: null
+    p2p_port: 19444
+    rpc_port: 18443
+    rpc_tunnel_port: 18506
+    status: planned
