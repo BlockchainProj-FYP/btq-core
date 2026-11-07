@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Plan or execute an isolated three-node regtest block run on one host."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import random
+import secrets
+import socket
+import subprocess
+import sys
+import time
+import uuid
+
+
+P2P_BASE = 19550
+RPC_BASE = 18550
+NODE_COUNT = 3
+
+
+def command(args, *, timeout=20):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    if result.returncode:
+        raise RuntimeError(f"{' '.join(map(str, args[:2]))}: {result.stderr.strip() or result.stdout.strip()}")
+    return result.stdout.strip()
+
+
+def cli(binary, datadir, method, *params):
+    return command([str(binary), f"-datadir={datadir}", "-regtest", method, *map(str, params)])
+
+
+def rpc_json(binary, datadir, method, *params):
+    return json.loads(cli(binary, datadir, method, *params))
+
+
+def available(port):
+    with socket.socket() as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def schedule(seed, duration, mean_interval):
+    rng = random.Random(seed)
+    at = 0.0
+    result = []
+    while True:
+        at += rng.expovariate(1.0 / mean_interval)
+        if at >= duration:
+            return result
+        result.append({"index": len(result) + 1, "offset_seconds": round(at, 6)})
+
+
+def write_json(path, value):
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def wait_rpc(cli_bin, datadir, process, timeout=30):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"btqd exited early for {datadir.name}")
+        try:
+            cli(cli_bin, datadir, "getblockcount")
+            return
+        except (RuntimeError, subprocess.TimeoutExpired):
+            time.sleep(0.3)
+    raise TimeoutError(f"RPC did not start for {datadir.name}")
+
+
+def wait_tip(cli_bin, datadirs, expected_hash, timeout=15):
+    start = time.monotonic()
+    while time.monotonic() - start < timeout:
+        try:
+            hashes = [cli(cli_bin, d, "getbestblockhash") for d in datadirs]
+            if all(h == expected_hash for h in hashes):
+                return round((time.monotonic() - start) * 1000, 3)
+        except (RuntimeError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(0.1)
+    raise TimeoutError(f"nodes did not converge on {expected_hash}")
+
+
+def wait_peers(cli_bin, datadirs, timeout=20):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if all(all(peer["connected"] for peer in rpc_json(cli_bin, d, "getaddednodeinfo"))
+                   for d in datadirs):
+                return
+        except (RuntimeError, subprocess.TimeoutExpired):
+            pass
+        time.sleep(0.3)
+    raise TimeoutError("local nodes did not establish their saved peer links")
+
+
+def make_config(datadir, index):
+    peers = [f"addnode=127.0.0.1:{P2P_BASE+j}" for j in range(NODE_COUNT) if j != index]
+    content = "\n".join([
+        "regtest=1", "", "[regtest]", "server=1", "listen=1", "discover=0",
+        "dnsseed=0", f"bind=127.0.0.1:{P2P_BASE+index}",
+        f"port={P2P_BASE+index}", f"rpcport={RPC_BASE+index}",
+        "rpcbind=127.0.0.1", "rpcallowip=127.0.0.1", "rpcuser=localrun",
+        f"rpcpassword={secrets.token_hex(24)}", "fallbackfee=0.0001", *peers, "",
+    ])
+    path = datadir / "btq.conf"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as stream:
+        stream.write(content)
+
+
+def execute(run_dir, manifest, schedule_items, btqd, btqcli):
+    processes = []
+    logs = []
+    datadirs = []
+    events_path = run_dir / "events.jsonl"
+    try:
+        manifest["status"] = "running"
+        manifest["started_at_unix_ns"] = time.time_ns()
+        write_json(run_dir / "manifest.json", manifest)
+        for index in range(NODE_COUNT):
+            datadir = run_dir / f"node{index+1}"
+            datadir.mkdir(mode=0o700)
+            make_config(datadir, index)
+            log = (run_dir / f"node{index+1}-console.log").open("w")
+            logs.append(log)
+            process = subprocess.Popen(
+                [str(btqd), f"-datadir={datadir}", f"-conf={datadir/'btq.conf'}", "-regtest"],
+                stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+            )
+            processes.append(process)
+            datadirs.append(datadir)
+        for datadir, process in zip(datadirs, processes):
+            wait_rpc(btqcli, datadir, process)
+        wait_peers(btqcli, datadirs)
+        rpc_json(btqcli, datadirs[0], "createwallet", "miner")
+        address = cli(btqcli, datadirs[0], "-rpcwallet=miner", "getnewaddress")
+        # The first node mines. The other two must receive each block through P2P.
+        start = time.monotonic()
+        with events_path.open("w") as events:
+            for item in schedule_items:
+                delay = start + item["offset_seconds"] - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
+                block_hash = rpc_json(btqcli, datadirs[0], "generatetoaddress", 1, address)[0]
+                convergence_ms = wait_tip(btqcli, datadirs, block_hash)
+                event = {**item, "observed_at_unix_ns": time.time_ns(),
+                         "block_hash": block_hash, "poll_convergence_ms": convergence_ms}
+                events.write(json.dumps(event) + "\n")
+                events.flush()
+        tips = [rpc_json(btqcli, d, "getblockchaininfo") for d in datadirs]
+        manifest["final_tips"] = [{"height": t["blocks"], "hash": t["bestblockhash"]} for t in tips]
+        manifest["status"] = "complete"
+    except BaseException as exc:
+        manifest["status"] = "failed"
+        manifest["error"] = str(exc)
+        raise
+    finally:
+        manifest["finished_at_unix_ns"] = time.time_ns()
+        for datadir in datadirs:
+            try:
+                cli(btqcli, datadir, "stop")
+            except (RuntimeError, subprocess.TimeoutExpired):
+                pass
+        for process in processes:
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        for log in logs:
+            log.close()
+        write_json(run_dir / "manifest.json", manifest)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--duration", type=float, default=600, help="run length in seconds")
+    parser.add_argument("--mean-interval", type=float, default=5, help="mean seconds between blocks")
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--output-root", type=Path, default=Path.home() / "btq-local-runs")
+    parser.add_argument("--execute", action="store_true", help="start isolated nodes and mine blocks")
+    args = parser.parse_args()
+    if args.duration <= 0 or args.mean_interval <= 0:
+        parser.error("duration and mean interval must be positive")
+    root = args.output_root.expanduser().resolve()
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    run_dir = root / f"run-{uuid.uuid4().hex[:12]}"
+    run_dir.mkdir(mode=0o700)
+    items = schedule(args.seed, args.duration, args.mean_interval)
+    source_root = Path(__file__).resolve().parent.parent
+    btqd = source_root / "src/btqd"
+    btqcli = source_root / "src/btq-cli"
+    manifest = {
+        "format": 1, "backend": "isolated-local-processes", "network": "regtest",
+        "nodes": NODE_COUNT, "seed": args.seed, "duration_seconds": args.duration,
+        "mean_interval_seconds": args.mean_interval, "distribution": "seeded-exponential",
+        "planned_blocks": len(items), "p2p_ports": list(range(P2P_BASE, P2P_BASE+NODE_COUNT)),
+        "rpc_ports": list(range(RPC_BASE, RPC_BASE+NODE_COUNT)),
+        "source_revision": command(["git", "-C", str(source_root), "rev-parse", "HEAD"]),
+        "source_tree": command(["git", "-C", str(source_root), "rev-parse", "HEAD:src"]),
+        "status": "planned",
+    }
+    write_json(run_dir / "schedule.json", items)
+    write_json(run_dir / "manifest.json", manifest)
+    print(f"run_dir={run_dir} planned_blocks={len(items)}")
+    if not args.execute:
+        return
+    if not btqd.is_file() or not btqcli.is_file():
+        parser.error("built src/btqd and src/btq-cli are required for --execute")
+    busy = [p for p in (*manifest["p2p_ports"], *manifest["rpc_ports"]) if not available(p)]
+    if busy:
+        parser.error(f"local ports are busy: {busy}")
+    manifest["binary_sha256"] = hashlib.sha256(btqd.read_bytes()).hexdigest()
+    write_json(run_dir / "manifest.json", manifest)
+    execute(run_dir, manifest, items, btqd, btqcli)
+    print(f"status={manifest['status']} final_height={manifest['final_tips'][0]['height']}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, TimeoutError, subprocess.TimeoutExpired) as exc:
+        print(f"local run failed: {exc}", file=sys.stderr)
+        sys.exit(1)

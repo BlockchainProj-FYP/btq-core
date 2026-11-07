@@ -6,6 +6,7 @@ wallet files, or node data. The dashboard remains in the separate `Frontend` rep
 See [OPERATIONS_LOG.md](OPERATIONS_LOG.md) for the setup history, fixes, and
 remaining limitations.
 See [CHECKPOINTS.md](CHECKPOINTS.md) for the latest completed task and next task.
+See [LOCAL_RUN.md](LOCAL_RUN.md) for the first isolated three-node schedule.
 
 ## Run the checker
 
