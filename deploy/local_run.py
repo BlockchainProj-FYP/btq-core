@@ -37,6 +37,7 @@ def rpc_json(binary, datadir, method, *params):
 
 def available(port):
     with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
             return True
@@ -192,14 +193,21 @@ def main():
     args = parser.parse_args()
     if args.duration <= 0 or args.mean_interval <= 0:
         parser.error("duration and mean interval must be positive")
+    source_root = Path(__file__).resolve().parent.parent
+    btqd = source_root / "src/btqd"
+    btqcli = source_root / "src/btq-cli"
+    if args.execute:
+        if not btqd.is_file() or not btqcli.is_file():
+            parser.error("built src/btqd and src/btq-cli are required for --execute")
+        busy = [p for p in (*range(P2P_BASE, P2P_BASE+NODE_COUNT),
+                            *range(RPC_BASE, RPC_BASE+NODE_COUNT)) if not available(p)]
+        if busy:
+            parser.error(f"local ports are busy: {busy}")
     root = args.output_root.expanduser().resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     run_dir = root / f"run-{uuid.uuid4().hex[:12]}"
     run_dir.mkdir(mode=0o700)
     items = schedule(args.seed, args.duration, args.mean_interval)
-    source_root = Path(__file__).resolve().parent.parent
-    btqd = source_root / "src/btqd"
-    btqcli = source_root / "src/btq-cli"
     manifest = {
         "format": 1, "backend": "isolated-local-processes", "network": "regtest",
         "nodes": NODE_COUNT, "seed": args.seed, "duration_seconds": args.duration,
@@ -215,11 +223,6 @@ def main():
     print(f"run_dir={run_dir} planned_blocks={len(items)}")
     if not args.execute:
         return
-    if not btqd.is_file() or not btqcli.is_file():
-        parser.error("built src/btqd and src/btq-cli are required for --execute")
-    busy = [p for p in (*manifest["p2p_ports"], *manifest["rpc_ports"]) if not available(p)]
-    if busy:
-        parser.error(f"local ports are busy: {busy}")
     manifest["binary_sha256"] = hashlib.sha256(btqd.read_bytes()).hexdigest()
     write_json(run_dir / "manifest.json", manifest)
     execute(run_dir, manifest, items, btqd, btqcli)
