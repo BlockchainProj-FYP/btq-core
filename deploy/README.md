@@ -3,6 +3,9 @@
 This directory belongs to the BTQ Core fork because the checker verifies the exact
 core revision running on every node. It does not contain RPC credentials, SSH keys,
 wallet files, or node data. The dashboard remains in the separate `Frontend` repo.
+See [OPERATIONS_LOG.md](OPERATIONS_LOG.md) for the setup history, fixes, and
+remaining limitations.
+See [CHECKPOINTS.md](CHECKPOINTS.md) for the latest completed task and next task.
 
 ## Run the checker
 
@@ -27,25 +30,50 @@ VMs, first establish trusted SSH access and verify their host keys with their
 operator. Do not disable host-key checking. The checker runs each VM's local
 `btq-cli`, which reads that VM's own private `btq.conf`; no RPC password is shared.
 
-## Next node setup tasks
+## Reproducible node configuration
 
-1. Confirm reserved public IPs, owner, VM shape, tenancy, and core commit for all
-   active nodes. Fill node5 and node6 only after those VMs exist.
-2. Check `chronyc tracking` and `chronyc sources -v` on each VM. Install chrony
-   where missing. Add a cloud NTP source only after confirming the endpoint is
-   reachable and avoiding duplicate configuration lines.
-3. Back up each VM's `~/.btq/btq.conf`. Preserve its own RPC credentials. Stop
-   `btqd` cleanly before changing config; only enable `txindex`, `logtimemicros`,
-   `debug=bench`, `fallbackfee`, and loopback ZMQ publishers after checking the
-   flags against this core build. Restart once, then verify RPC and port bindings.
-4. Choose one daemon lifecycle method per VM. A systemd unit may replace manual
-   `btqd -daemon` startup, but never run both against the same data directory.
-5. Use persistent peer configuration or `addnode ... add` for links meant to
-   survive the session. `onetry` is a one-off connection attempt. Verify unique
-   remote IPs, not just `getconnectioncount`.
-6. Mine with an existing loaded wallet, record the resulting block hash, and
-   rerun the checker. A same-height check alone cannot detect a chain split.
+`render_conf.py` renders the measured regtest settings and persistent peer list
+from `addressing.yaml`. It creates a new candidate with mode `0600` and never
+overwrites the live config. On an existing node, preserve that node's credentials:
 
-The current four-node network is a working bench, not yet a complete research
-instrument. Time-synchronized propagation probes, automated scenarios, and
-BIP-361 enforcement are separate later tasks.
+```bash
+cd ~/btq-core
+.venv/bin/python deploy/render_conf.py --node node1 \
+  --current ~/.btq/btq.conf --output ~/.btq/btq.conf.candidate
+grep -Ev '^(rpcuser|rpcpassword)=' ~/.btq/btq.conf.candidate
+```
+
+Replace `node1` with the inventory name of the VM. Do not print, commit, or send
+the full candidate: it contains the RPC password. For a new node with no config,
+omit `--current`; the renderer generates a unique 48-character hex password.
+Review the nonsecret settings before installing the candidate.
+
+The tested service unit is `deploy/systemd/btqd.service`. On the four existing
+VMs, systemd and `btq.conf` were already configured manually. To check the
+installed unit without changing it, run:
+
+```bash
+cmp -s deploy/systemd/btqd.service /etc/systemd/system/btqd.service && echo 'unit matches'
+systemctl is-enabled btqd chrony
+```
+
+For a *new* node, after the binary is built and the candidate is reviewed,
+stop any manually started `btqd`, back up any existing config, install the
+candidate as `~/.btq/btq.conf` with mode `0600`, then install the service unit
+as `/etc/systemd/system/btqd.service` with mode `0644`. Run `sudo systemctl
+daemon-reload` and `sudo systemctl enable --now btqd`. Verify the service,
+loopback RPC and ZMQ bindings, clock, peer list, and full mesh before changing
+another node. Do not run `btqd -daemon` while systemd manages the data directory.
+
+### Network and reboot checks
+
+Each active node's host and OCI firewalls must allow TCP 19444 from the other
+active public IPs. Keep TCP 18443, 4000, and ZMQ ports private. Save host
+firewall rules with `netfilter-persistent save` and verify the cloud ingress
+rules separately. A reboot may briefly produce a checker failure while saved
+peers reconnect; record the time to a stable `PASS`. Confirm `chronyc tracking`
+is settled before any cross-node timing measurement.
+
+The four-node bench has passed a block-propagation smoke test and reboot checks.
+Time-synchronized propagation probes, automated scenarios, and BIP-361
+enforcement are separate later tasks.

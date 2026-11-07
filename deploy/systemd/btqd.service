@@ -1,0 +1,18 @@
+[Unit]
+Description=BTQ Core regtest node
+Wants=network-online.target chrony.service
+After=network-online.target chrony.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+ExecStart=/home/ubuntu/btq-core/src/btqd -regtest -conf=/home/ubuntu/.btq/btq.conf
+ExecStop=/home/ubuntu/btq-core/src/btq-cli -regtest -conf=/home/ubuntu/.btq/btq.conf stop
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target
