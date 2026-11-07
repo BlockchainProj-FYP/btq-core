@@ -32,6 +32,8 @@ def inspect(name, node):
     info = json.loads(remote(host, "~/btq-core/src/btq-cli -regtest getblockchaininfo"))
     peers = json.loads(remote(host, "~/btq-core/src/btq-cli -regtest getpeerinfo"))
     revision = remote(host, "git -C ~/btq-core rev-parse HEAD")
+    source_tree = remote(host, "git -C ~/btq-core rev-parse HEAD:src")
+    binary_version = remote(host, "~/btq-core/src/btqd --version").splitlines()[0]
     peer_ips = set()
     for peer in peers:
         address = peer.get("addr", "")
@@ -41,6 +43,7 @@ def inspect(name, node):
             pass
     return {"node": name, "ip": node["public_ip"], "height": info["blocks"],
             "hash": info["bestblockhash"], "revision": revision,
+            "source_tree": source_tree, "binary_version": binary_version,
             "peer_ips": sorted(peer_ips), "connections": len(peers)}
 
 
@@ -67,8 +70,10 @@ def main():
         failures.append("unreachable or invalid nodes: " + ", ".join(errors))
     if len({(r["height"], r["hash"]) for r in results}) > 1:
         failures.append("best chain tips differ")
-    if len({r["revision"] for r in results}) > 1:
-        failures.append("core revisions differ")
+    if len({r["source_tree"] for r in results}) > 1:
+        failures.append("core source trees differ")
+    if len({r["binary_version"] for r in results}) > 1:
+        failures.append("binary version strings differ")
     for result in results:
         missing = {nodes[n]["public_ip"] for n in names if n != result["node"]} - set(result["peer_ips"])
         if missing:
@@ -81,7 +86,8 @@ def main():
         for result in results:
             print(f'{result["node"]}: height={result["height"]} hash={result["hash"]} '
                   f'revision={result["revision"][:12]} unique_peers={len(result["peer_ips"])} '
-                  f'connections={result["connections"]}')
+                  f'connections={result["connections"]} source_tree={result["source_tree"][:12]} '
+                  f'binary={result["binary_version"]}')
         for name, error in errors.items():
             print(f"{name}: ERROR {error}", file=sys.stderr)
         for failure in failures:

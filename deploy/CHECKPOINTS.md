@@ -6,13 +6,12 @@ Do not include credentials, private keys, wallet data, or raw node config.
 
 ## Current checkpoint
 
-**Completed task:** Four-node regtest bench restored and verified after node
-restarts and reboot tests. The committed renderer has now been reviewed on all
-four live nodes without replacing their working configs. Each candidate is
-private, retains that node's RPC credentials, and contains the expected peer
-list and measured settings. The committed systemd unit matches every installed
-unit. The four-node mesh checker last returned `PASS` after VM 84 and VM 145
-rebooted.
+**Completed task:** VM 84's dashboard proxy now runs as a boot-managed,
+loopback-only systemd service. It survived a reboot and returned frontend
+HTTP 200 and RPC height 5. The dashboard service template was committed to
+the private Frontend repository. All four core config candidates were reviewed
+without replacing the working configs. The mesh checker was corrected to
+distinguish core source changes from documentation-only repository commits.
 
 **Evidence:** Nodes 1-4 reported height `5`, best-block hash
 `667dae19063fd494b36fbca79b2da46431f0b116dd36a73ad0e0432d1cce5a0e`,
@@ -27,16 +26,13 @@ calls for six, plus a local cluster, orchestration, metrics, and enforcement.
 The checker is a connectivity and chain-consistency check, not a propagation
 latency measurement. Repository revision is not a binary attestation.
 
-**Next task:** Add a boot-managed, loopback-only dashboard service for VM 84 if
-that dashboard should come back automatically after a reboot. The first
-research coding milestone after that is a seeded, 10-minute block schedule
-with a saved run manifest.
+**Next task:** Verify the corrected mesh checker on the live four-node network,
+then build a seeded, 10-minute block schedule with a saved run manifest.
 
 **Open issue:** VM 84-initiated TCP 19444 connections toward Abyaan's VMs
 timed out after reboot, although Abyaan's saved outbound connections restored
 the full mesh. Review OCI ingress rules and record any topology or cloud rule
-change before a controlled experiment. VM 84's dashboard server did not
-restart on boot. A planning draft contained a literal RPC password; verify
+change before a controlled experiment. A planning draft contained a literal RPC password; verify
 whether it matches any live VM and rotate it there if it does.
 
 ## Completed checkpoints
@@ -57,6 +53,7 @@ whether it matches any live VM and rotate it there if it does.
 | Node2 candidate review | Reviewed a previously rendered private candidate without overwriting it or changing the live config. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
 | Node3 candidate review | Rendered a private candidate after installing PyYAML in its virtual environment. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
 | Four-node candidate review | Reviewed node4 and completed private credential comparisons on all four nodes. No live config was replaced. | All candidates mode `0600`, expected nonsecret settings and three peers, credentials matching live configs, and service units matching the committed template. |
+| VM 84 dashboard boot service | Installed a loopback-only dashboard unit from the private Frontend repository and rebooted VM 84. | Service active after reboot; API and RPC height 5, frontend HTTP 200, port 4000 on 127.0.0.1. |
 
 ## Update after the next task
 

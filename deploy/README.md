@@ -22,7 +22,9 @@ python3 -m venv .venv
 The two-node command is useful while only Hussain's VMs are SSH-accessible. The
 default checks all active nodes. A full-mesh pass requires every active node to
 see each other active node's public IP, plus matching block height, best block
-hash, and source commit. Duplicate inbound/outbound sessions do not count as
+hash, core `src` tree, and binary version string. Repository revisions are
+reported for provenance but may differ after documentation-only commits.
+Duplicate inbound/outbound sessions do not count as
 additional peers. Save JSON output with an experiment run if desired.
 
 `ssh_host` can be an SSH config alias instead of `ubuntu@IP`. For the Abyaan-owned

@@ -30,10 +30,12 @@ private configuration out of Git.
   mined on node3 propagated to all four nodes (height 5). These are smoke
   tests, not research-grade propagation latency measurements.
 - VM 84's dashboard source snapshot is installed at
-  `~/Frontend/btq-dashboard`, but its server is not yet a boot-managed service;
-  after reboot, port 4000 was not serving. The local laptop dashboard uses an
-  SSH RPC tunnel to node1. Dashboard code lives in the separate private
-  `BlockchainProj-FYP/Frontend` repository.
+  `~/Frontend/btq-dashboard`. Its proxy is now a boot-managed systemd service,
+  bound to `127.0.0.1:4000`. It returned HTTP 200 and RPC height 5 after a
+  reboot. The local laptop dashboard uses an SSH RPC tunnel to node1.
+  Dashboard code and the VM 84 service template live in the separate private
+  `BlockchainProj-FYP/Frontend` repository, with the service template added in
+  commit `d7e89db`.
 
 ## Problems encountered and resolutions
 
@@ -65,7 +67,8 @@ private configuration out of Git.
 | Reboot of node3 broke its direct link to node4 | Both friend-owned host firewalls rejected new inbound P2P connections from one another. | Abyaan added and saved scoped TCP 19444 rules with `netfilter-persistent`; after reboot, the rule survived and the link returned. |
 | Reboot of node2 temporarily broke its direct links to nodes 3 and 4 | Saved peers were retrying, and node2-initiated TCP 19444 connections toward those VMs timed out even when host firewall rules were present. The opposite direction connected. | Abyaan added saved host firewall rules for the Hussain VM IPs. The friend-owned nodes' outbound connections eventually re-established the full mesh. Cloud ingress for node2-initiated connections remains to be reviewed if both initiation directions are required. |
 | Reboot of node1 removed its previous broad P2P host rule | The original TCP 19444 rule had not been saved. | Replaced it with three `/32` peer-specific rules, ran `netfilter-persistent save`, rebooted again, and confirmed the rules and full mesh persisted. |
-| VM 84 dashboard stopped after VM reboot | Its server was launched as a process, not a boot-managed service. | Node service remains healthy; dashboard startup service is a pending task. Keep proxy and RPC loopback-only. |
+| VM 84 dashboard stopped after VM reboot | Its server was launched as a process, not a boot-managed service. | Added `btq-dashboard.service` to the private Frontend repository and installed it on VM 84. After a reboot, the service was active, API and RPC reported height 5, frontend returned HTTP 200, and port 4000 listened only on 127.0.0.1. |
+| Checker rejected documentation-only repository drift | Nodes had pulled successive operations-log commits, so `git rev-parse HEAD` differed even though BTQ core source and binary version were unchanged. | Changed the checker to report each revision but compare the core `src` tree and binary version string. This reduces false failures from deployment-document updates; it is not a binary attestation. |
 
 ## Repository and configuration decisions
 
@@ -91,14 +94,12 @@ private configuration out of Git.
 
 ## Next work
 
-1. Make the VM 84 dashboard a loopback-only boot-managed service if it should
-   be available after every reboot.
-2. Review the OCI ingress rules for TCP 19444 and document the remaining
+1. Review the OCI ingress rules for TCP 19444 and document the remaining
    direction-dependent connection behavior. Keep RPC and ZMQ private.
-3. Build the first reproducible 10-minute block schedule and result manifest:
+2. Build the first reproducible 10-minute block schedule and result manifest:
    source revision, node list, seed, actions, clock status, block hashes, and
    checker outcome. Then add on-node event probes for actual timing metrics.
-4. Fill node5 and node6 inventory entries only when those VMs are assigned,
+3. Fill node5 and node6 inventory entries only when those VMs are assigned,
    and repeat the same onboarding, firewall, clock, and mesh checks.
 
 ## How to maintain this log
