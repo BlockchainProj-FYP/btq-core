@@ -5,6 +5,8 @@ BTQ Core regtest processes on one host, each with a fresh private data
 directory. P2P and RPC ports bind to loopback and do not touch the existing
 four-VM chain. It saves the seed, planned schedule, source identity, binary
 hash, individual block events, and final chain tips under `~/btq-local-runs`.
+Each of the three local node pairs has one configured dial direction, avoiding
+duplicate sessions while retaining a complete three-node mesh.
 
 This is a process-based local cluster on one VM, not the planned Docker
 cluster. Its `poll_convergence_ms` field includes sequential CLI polling and

@@ -99,9 +99,10 @@ def wait_peers(cli_bin, datadirs, timeout=20):
 
 
 def make_config(datadir, index):
-    peers = [f"addnode=127.0.0.1:{P2P_BASE+j}" for j in range(NODE_COUNT) if j != index]
+    # One dial per pair avoids duplicate inbound/outbound sessions.
+    peers = [f"addnode=127.0.0.1:{P2P_BASE+j}" for j in range(index)]
     content = "\n".join([
-        "regtest=1", "", "[regtest]", "server=1", "listen=1", "discover=0",
+        "regtest=1", "", "[regtest]", "server=1", "listen=1", "listenonion=0", "discover=0",
         "dnsseed=0", f"bind=127.0.0.1:{P2P_BASE+index}",
         f"port={P2P_BASE+index}", f"rpcport={RPC_BASE+index}",
         "rpcbind=127.0.0.1", "rpcallowip=127.0.0.1", "rpcuser=localrun",
