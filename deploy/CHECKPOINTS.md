@@ -24,9 +24,10 @@ calls for six, plus a local cluster, orchestration, metrics, and enforcement.
 The checker is a connectivity and chain-consistency check, not a propagation
 latency measurement. Repository revision is not a binary attestation.
 
-**Next task:** Verify the committed config renderer on nodes 2, 3, and 4
-without replacing their working configs. Node1 already produced a mode `0600`
-candidate with the expected nonsecret settings and an exact service-unit match.
+**Next task:** Verify the committed config renderer on nodes 3 and 4 without
+replacing their working configs. Nodes 1 and 2 have mode `0600` candidates
+with the expected nonsecret settings and exact service-unit matches. Node2's
+candidate RPC credentials were privately confirmed to match its live config.
 Then add a boot-managed,
 loopback-only dashboard service for VM 84 if that dashboard should come back
 automatically after a reboot. The first research coding milestone after that
@@ -54,6 +55,7 @@ whether it matches any live VM and rotate it there if it does.
 | Reboot recovery | All four nodes were reboot-tested; missing P2P host rules were corrected and saved. | Final checker `PASS` after Hussain VM reboot tests; firewall rules survived reboot. |
 | Configuration source | Secret-free renderer and exact tested service unit prepared in `deploy/`. | Renderer checks cover credential preservation, peer lists, output mode, and no overwrite; service template hash matched installed units on nodes 1 and 2. |
 | Node1 candidate review | Rendered node1's private candidate from its live config without replacing it. | Candidate mode `0600`, expected nonsecret settings and three peers, and service unit matched. |
+| Node2 candidate review | Reviewed a previously rendered private candidate without overwriting it or changing the live config. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
 
 ## Update after the next task
 
