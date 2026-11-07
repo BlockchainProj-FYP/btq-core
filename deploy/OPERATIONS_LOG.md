@@ -54,6 +54,7 @@ private configuration out of Git.
 | The node1 repository showed `.venv/` as untracked | The core fork's root `.gitignore` did not exclude local Python virtual environments. | Added `.venv/` to `.gitignore` so a future broad `git add` cannot include the environment. The separate untracked `nodesource_setup.sh` still requires operator review and must not be committed blindly. |
 | Re-running the config renderer on node2 raised `FileExistsError` | A private `btq.conf.candidate` already existed; the renderer intentionally refuses to overwrite an existing file. | Reviewed the existing candidate instead. Its mode was `0600`, nonsecret settings and peers were correct, credentials matched the live config in a comparison that printed no secret, and the installed service matched the committed template. |
 | Node3's renderer initially failed with `ModuleNotFoundError: yaml` | PyYAML was absent from that VM's `.venv`, even though the renderer existed. | Installed the pinned major range from `deploy/requirements.txt` into the VM's virtual environment, then rendered and reviewed the candidate. Its mode, peers, nonsecret flags, private credential comparison, and service unit all passed. The live config was not replaced. |
+| Node4 candidate review completed | The last VM needed a renderer and service-template check. | Its candidate mode was `0600`, the expected nonsecret flags and three peers were present, a private comparison confirmed RPC credentials matched the live config, and the installed service matched the template. Node1's credentials were also compared privately; all four candidates now pass. No live config was replaced. |
 | Node1 could not SSH into node2 | First, the node2 SSH host key was unknown; then public-key authentication was missing. | Verified node2's ED25519 host fingerprint with its operator, created a dedicated `btq_mesh_check` key on node1, authorized its public half on node1 and node2, and configured SSH to use it. The private half remained on node1. |
 | Node1 could not inspect Abyaan's VMs | Their host keys and authorization had not been established. | Abyaan supplied host fingerprints and authorized the public checker key. After verification, node1 could SSH into nodes 3 and 4 and the full checker passed. |
 | Initial GitHub push methods failed | Shell HTTPS had no usable credentials; the connected GitHub integration could read the repository but returned `403` for a write. | Used the operator's existing authenticated GitHub SSH identity and verified the remote branch matched the local parent before pushing deployment commit `869926f`. |
@@ -90,17 +91,14 @@ private configuration out of Git.
 
 ## Next work
 
-1. Verify `deploy/render_conf.py` against each live node's private config and
-   compare `deploy/systemd/btqd.service` to the installed units. Do not print
-   the generated password or replace live config just to normalize comments.
-2. Make the VM 84 dashboard a loopback-only boot-managed service if it should
+1. Make the VM 84 dashboard a loopback-only boot-managed service if it should
    be available after every reboot.
-3. Review the OCI ingress rules for TCP 19444 and document the remaining
+2. Review the OCI ingress rules for TCP 19444 and document the remaining
    direction-dependent connection behavior. Keep RPC and ZMQ private.
-4. Build the first reproducible 10-minute block schedule and result manifest:
+3. Build the first reproducible 10-minute block schedule and result manifest:
    source revision, node list, seed, actions, clock status, block hashes, and
    checker outcome. Then add on-node event probes for actual timing metrics.
-5. Fill node5 and node6 inventory entries only when those VMs are assigned,
+4. Fill node5 and node6 inventory entries only when those VMs are assigned,
    and repeat the same onboarding, firewall, clock, and mesh checks.
 
 ## How to maintain this log

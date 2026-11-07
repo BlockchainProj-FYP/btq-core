@@ -7,9 +7,12 @@ Do not include credentials, private keys, wallet data, or raw node config.
 ## Current checkpoint
 
 **Completed task:** Four-node regtest bench restored and verified after node
-restarts and reboot tests. Repository templates for the measured config and
-systemd service have been prepared. The four-node mesh checker last returned
-`PASS` after VM 84 and VM 145 rebooted.
+restarts and reboot tests. The committed renderer has now been reviewed on all
+four live nodes without replacing their working configs. Each candidate is
+private, retains that node's RPC credentials, and contains the expected peer
+list and measured settings. The committed systemd unit matches every installed
+unit. The four-node mesh checker last returned `PASS` after VM 84 and VM 145
+rebooted.
 
 **Evidence:** Nodes 1-4 reported height `5`, best-block hash
 `667dae19063fd494b36fbca79b2da46431f0b116dd36a73ad0e0432d1cce5a0e`,
@@ -24,14 +27,10 @@ calls for six, plus a local cluster, orchestration, metrics, and enforcement.
 The checker is a connectivity and chain-consistency check, not a propagation
 latency measurement. Repository revision is not a binary attestation.
 
-**Next task:** Verify the committed config renderer on node4 without replacing
-its working config. Nodes 1-3 have mode `0600` candidates with expected
-nonsecret settings and exact service-unit matches. Nodes 2 and 3 had candidate
-RPC credentials privately confirmed against their live configs.
-Then add a boot-managed,
-loopback-only dashboard service for VM 84 if that dashboard should come back
-automatically after a reboot. The first research coding milestone after that
-is a seeded, 10-minute block schedule with a saved run manifest.
+**Next task:** Add a boot-managed, loopback-only dashboard service for VM 84 if
+that dashboard should come back automatically after a reboot. The first
+research coding milestone after that is a seeded, 10-minute block schedule
+with a saved run manifest.
 
 **Open issue:** VM 84-initiated TCP 19444 connections toward Abyaan's VMs
 timed out after reboot, although Abyaan's saved outbound connections restored
@@ -57,6 +56,7 @@ whether it matches any live VM and rotate it there if it does.
 | Node1 candidate review | Rendered node1's private candidate from its live config without replacing it. | Candidate mode `0600`, expected nonsecret settings and three peers, and service unit matched. |
 | Node2 candidate review | Reviewed a previously rendered private candidate without overwriting it or changing the live config. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
 | Node3 candidate review | Rendered a private candidate after installing PyYAML in its virtual environment. | Candidate mode `0600`, expected nonsecret settings and three peers, RPC credentials matched live config in a private comparison, and service unit matched. |
+| Four-node candidate review | Reviewed node4 and completed private credential comparisons on all four nodes. No live config was replaced. | All candidates mode `0600`, expected nonsecret settings and three peers, credentials matching live configs, and service units matching the committed template. |
 
 ## Update after the next task
 
