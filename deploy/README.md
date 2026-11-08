@@ -153,3 +153,14 @@ On-node ZeroMQ subscriber daemon capturing microsecond-level event arrivals.
 * **Schema:**
   ```json
   {"n": "node1", "t_ns": 1794169447620296066, "topic": "hashblock", "id": "1091529d...", "seq": 33, "gap": false}
+
+### 3. `aggregate.py`
+Post-run data ingestion pipeline executed from the orchestration host (VM 145):
+* Fetches remote `nodeX_probe.jsonl` files from Nodes 2, 3, and 4 via non-interactive `scp`.
+* Ingests block and transaction events into `metrics.sqlite`.
+* Computes real-time arrival deltas ($\Delta t = t_n - t_{\min}$) in milliseconds.
+
+### 4. `analyze_baseline.py`
+Statistical processor querying `metrics.sqlite` to compute:
+* Per-node mean, median ($p_{50}$), and maximum propagation latency.
+* Network-wide transit latency distribution excluding the mining origin ($p_{50}$, $p_{90}$, $p_{95}$, $p_{99}$).
