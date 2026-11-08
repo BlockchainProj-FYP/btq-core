@@ -11,11 +11,11 @@ private configuration out of Git.
 - Four Oracle VMs run BTQ Core regtest: Hussain's nodes at `145.241.118.62`
   (node1) and `84.235.244.35` (node2), and Abyaan's nodes at
   `130.210.56.76` (node3) and `132.226.188.199` (node4).
-- The four-node checker passed after the isolated 10-minute run. All nodes
-  reported height 5, best block hash
-  `667dae19063fd494b36fbca79b2da46431f0b116dd36a73ad0e0432d1cce5a0e`,
+- The four-node checker passed after the probed mesh smoke run. All nodes
+  reported height 6, best block hash
+  `6f8b484167812112fb3a13850bb995a9741e83728488ec398c6d1e7fec1da1e2`,
   identical core source tree and binary version, and all three expected
-  remote VM IPs as unique peers. Documentation revisions differ across VMs.
+  remote VM IPs as unique peers.
 - `btqd` and chrony are enabled as systemd services on all four VMs. Nodes
   have `txindex=1`, `fallbackfee=0.0001`, microsecond log timestamps,
   `debug=bench`, and loopback-only ZMQ publishers. RPC is loopback-only on
@@ -28,13 +28,17 @@ private configuration out of Git.
 - A block mined on node1 propagated to all four nodes (height 4). A block
   mined on node3 propagated to all four nodes (height 5). These are smoke
   tests, not research-grade propagation latency measurements.
-- A separate three-process local regtest cluster on VM 145 completed both a
-  short seeded run (12 planned and recorded blocks) and a 10-minute seeded
-  run (143 planned and recorded blocks). In the longer run, all three local
-  tips matched at height 143 and hash
-  `7b01437650e36c600f387ae0dd608738756d6d59a01c781c923ca87b1637f744`.
-  Only the production daemon remained afterward; the four-VM chain stayed at
-  height 5.
+- A separate three-process local regtest cluster on VM 145 completed the
+  original seeded runs, then repeated a 20-second and 10-minute run with local
+  ZMQ block probes. The longer probed run recorded all 143 mined blocks on
+  each of three probes, yielding 429 arrival rows with no sequence gaps and
+  matching local tips at height 143. Only the production daemon remained;
+  the four-VM chain stayed at height 5 until the deliberate mesh smoke block.
+- The probes were then deployed to nodes 1-4. A one-block four-VM run saved
+  one matching ZMQ event per node, before/after clock tracking within the
+  5 ms gate, and a matching production tip at height 6. Its private result
+  directory is `/home/ubuntu/btq-mesh-probe-runs/run-aa71f24cd81a` on node1.
+  This is a timing smoke test, not a validated propagation distribution.
 - VM 84's dashboard source snapshot is installed at
   `~/Frontend/btq-dashboard`. Its proxy is now a boot-managed systemd service,
   bound to `127.0.0.1:4000`. It returned HTTP 200 and RPC height 5 after a
@@ -78,6 +82,9 @@ private configuration out of Git.
 | First isolated local run did not establish all saved peer links | Configuring every local node to dial every other node created duplicate inbound/outbound sessions; `getaddednodeinfo` could report one redundant dial disconnected although other links were active. | Configured only one dial per node pair and disabled onion listening. A subsequent short run completed with 12 blocks and matching tips. |
 | A 10-minute run initially failed its port preflight | TCP sockets from the short run temporarily made some fixed loopback ports appear busy, although no extra daemon remained. | Set `SO_REUSEADDR` in the preflight check and moved port validation before creation of a run directory. The next 10-minute run started. |
 | The 10-minute run's SSH session ended before verification | The SSH client reported that VM 145 was not responding. The run's private directory had been observed with a running manifest and recorded events, but completion was not observed through that session. | A later SSH check found manifest `complete`, 143 of 143 event records, three matching local tips at height 143, no remaining local daemons, and a production four-node checker `PASS` at height 5. |
+| First probed local run rejected every block hash | BTQ's `hashblock` ZMQ payload was already in the same byte order as the RPC hash; the probe reversed it. | Removed the reversal. The failed run had 12 events per probe but mismatched hashes. The later short and 10-minute runs matched every mined hash. |
+| Next local run timed out waiting for saved peer links | All three daemons started together, so one node attempted its first loopback dial before the destination listened; retry did not complete within the 20-second check. | Started each daemon and waited for its RPC before starting the next. Subsequent short and 10-minute runs established all local links and completed. |
+| Four-VM timing preflight stopped before mining | Node2's public NTP source gave root dispersion about 6 ms, above the run's 5 ms threshold. A read-only query to OCI local NTP showed about 10.7 ms difference from its then-current clock. | Added `server 169.254.169.254 iburst prefer` in `/etc/chrony/sources.d/oci-local.sources` on node2 and reloaded chrony sources. OCI local NTP became the selected source; root dispersion fell below 1 ms and leap status stayed normal. The repeated four-VM run passed clock checks before and after. |
 
 ## Repository and configuration decisions
 
@@ -106,10 +113,11 @@ private configuration out of Git.
 
 1. Review the OCI ingress rules for TCP 19444 and document the remaining
    direction-dependent connection behavior. Keep RPC and ZMQ private.
-2. Add on-node event probes and clock-quality records for actual timing
-   metrics. The completed local runner saves source revision, binary hash,
-   seed, schedule, block events, and final tips, but its sequential CLI
-   polling is not a propagation-latency measurement.
+2. Validate the ZMQ timing method with a known-delay test and longer probe
+   soak, then freeze the metric definition and collect multiple seeded E0
+   baseline runs. The local runner saves source revision, binary hash, seed,
+   schedule, per-node events, clock snapshots, and final tips. Its sequential
+   CLI polling remains only a convergence check.
 3. Fill node5 and node6 inventory entries only when those VMs are assigned,
    and repeat the same onboarding, firewall, clock, and mesh checks.
 

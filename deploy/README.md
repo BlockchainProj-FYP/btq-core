@@ -28,6 +28,12 @@ normal chrony leap status and both system offset and root dispersion under
 a timing smoke test, not a calibrated propagation dataset. Do not commit raw
 run directories or their host configuration.
 
+The first four-VM run is recorded in [CHECKPOINTS.md](CHECKPOINTS.md). Its
+initial preflight stopped before mining because node2's public NTP source had
+about 6 ms root dispersion. Node2 now has a preferred OCI local NTP source in
+`/etc/chrony/sources.d/oci-local.sources`; chrony selected it and the repeated
+run passed the 5 ms gate. Recheck this after a reboot before timed experiments.
+
 ```bash
 cd ~/btq-core
 .venv/bin/python deploy/mesh_probe_run.py

@@ -6,28 +6,33 @@ Do not include credentials, private keys, wallet data, or raw node config.
 
 ## Current checkpoint
 
-**Completed task:** The seeded, isolated 10-minute regtest run on VM 145
-completed. Its manifest reports `complete`, all 143 planned blocks have event
-records, and all three local nodes ended at height 143 with the same tip. The
-local nodes stopped; the production four-VM chain remained at height 5.
+**Completed task:** On-node ZMQ block probes were added to the isolated runner
+and deployed to all four VMs. The 20-second and 10-minute isolated runs on VM
+145 completed with every block recorded by all three probes. A controlled
+one-block four-VM timing smoke run then passed its mesh, probe, and clock gates.
 
-**Evidence:** Private run directory
-`/home/ubuntu/btq-local-runs/run-21d08b1395a6` contains 143 block events and
-three final tips at hash
-`7b01437650e36c600f387ae0dd608738756d6d59a01c781c923ca87b1637f744`.
-Only the production `btqd` process remained. The four-node checker returned
-`PASS`: all nodes reported height `5`, hash
-`667dae19063fd494b36fbca79b2da46431f0b116dd36a73ad0e0432d1cce5a0e`,
-the same core source tree and binary version, and three expected peer IPs.
+**Evidence:** VM 145's private isolated run
+`/home/ubuntu/btq-local-runs/run-de7bcbbf4f10` has manifest `complete`, 143
+mined blocks, 143 ZMQ records per local node, 429 arrival rows, no sequence
+gaps, and three matching tips at height 143. Its before/after chrony readings
+had normal leap status. The four-VM run
+`/home/ubuntu/btq-mesh-probe-runs/run-aa71f24cd81a` has manifest `complete`,
+one matching block event per VM, no probe gaps, before/after clock checks
+within the 5 ms gate, and mesh checker `PASS` before and after mining. All four
+production nodes now report height `6` and hash
+`6f8b484167812112fb3a13850bb995a9741e83728488ec398c6d1e7fec1da1e2`.
+All temporary probes exited.
 
-**Scope of this result:** The current bench has four nodes. The BIP-361 plan
-calls for six, plus a local cluster, orchestration, metrics, and enforcement.
-The checker is a connectivity and chain-consistency check, not a propagation
-latency measurement. Repository revision is not a binary attestation.
+**Scope of this result:** These are timing smoke tests. The real-mesh table has
+only one block and has not been validated with known delay, probe soak, or
+multiple seeds. The current bench has four of the six planned VMs. The local
+cluster is process-based, not Docker Compose. The mesh checker confirms
+connectivity and chain consistency; matching source tree and version strings
+are not a binary attestation.
 
-**Next task:** Add on-node block event probes and clock-quality records, then
-define the timing metric and freeze the experiment protocol before comparing
-propagation results. The current sequential CLI polling is only a smoke test.
+**Next task:** Validate timing accuracy with a controlled known-delay test and
+a longer probe soak, then freeze the metric definition and run several seeded
+E0 baseline replicates. Keep the four-VM result labelled preliminary.
 
 **Open issue:** VM 84-initiated TCP 19444 connections toward Abyaan's VMs
 timed out after reboot, although Abyaan's saved outbound connections restored
@@ -58,6 +63,8 @@ does.
 | Checker source identity fix | Compared core `src` tree and binary version instead of requiring equal documentation revisions. | Live four-node check passed: identical height 5, best hash, source tree, binary version, and three expected peer IPs each. |
 | Isolated short run | Ran three new local regtest nodes on VM 145 with seed 7, a 20-second window, and four-second mean block interval. | 12 planned and 12 recorded blocks; matching local height 12 and tips; private run directory mode `0700`; no extra `btqd` left running; production four-node checker `PASS` at height 5. |
 | Isolated 10-minute run | Ran the three-node local cluster on VM 145 with seed 7, a 600-second window, and five-second mean block interval. | Manifest `complete`; 143 planned and recorded blocks; all local tips match at height 143; only production `btqd` remains; four-node mesh checker `PASS` at height 5. |
+| Probed isolated runs | Added one loopback ZMQ probe per local node and chrony snapshots to the manifest. Repeated a 20-second run and a 10-minute run on VM 145. | Short run: 12 events per probe. Long run: 143 events per probe, 429 arrival rows, matching local tips, no sequence gaps; production mesh unchanged at height 5. |
+| Four-VM probe deployment and smoke run | Installed probe code and pyzmq on nodes 1-4. Added OCI local NTP as a preferred chrony source on node2 after its public source failed the clock gate. Ran one production regtest block from node1. | Four matching ZMQ events, normal leap status and under 5 ms offset/dispersion before and after, no sequence gaps, temporary probes stopped, all nodes at height 6 with the same hash and mesh checker `PASS`. |
 
 ## Update after the next task
 
