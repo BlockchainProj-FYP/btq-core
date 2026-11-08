@@ -188,7 +188,6 @@ def execute(run_dir, manifest, schedule_items, btqd, btqcli):
             )
             processes.append(process)
             datadirs.append(datadir)
-        for datadir, process in zip(datadirs, processes):
             wait_rpc(btqcli, datadir, process)
         wait_peers(btqcli, datadirs)
         ready_paths = []
