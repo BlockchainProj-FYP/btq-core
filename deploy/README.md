@@ -111,3 +111,45 @@ is settled before any cross-node timing measurement.
 The four-node bench has passed a block-propagation smoke test and reboot checks.
 Time-synchronized propagation probes, automated scenarios, and BIP-361
 enforcement are separate later tasks.
+
+# BTQ Core Deployment & Instrumentation Harness
+
+This directory contains the orchestration, verification, and telemetry tools for the 4-node regtest testbed evaluating post-quantum cryptographic (PQC) signature migration dynamics (BIP-361).
+
+## Network Topology & Infrastructure
+
+The testbed operates across four Oracle Cloud Ampere A1 ARM64 instances running Ubuntu 22.04 LTS in an all-to-all full mesh topology ($K_4$):
+
+| Node Label | Hostname | Public IP | Private Subnet | Role |
+|---|---|---|---|---|
+| `node1` | `hussain1` (VM 145) | `145.241.118.62` | `10.0.0.x` | Orchestrator & Miner |
+| `node2` | `hussain2` (VM 84) | `84.235.244.35` | `10.0.0.y` | Peer Validator |
+| `node3` | `friend-a` (VM 130) | `130.210.56.76` | `10.0.0.15` | Remote Validator |
+| `node4` | `friend-b` (VM 132) | `132.226.188.199` | `10.0.0.16` | Remote Validator / Git Push Host |
+
+### Port & Security Architecture
+* **P2P Transport (`19444`):** Publicly accessible only to peer `/32` IP addresses. BIP-324 P2P v2 encrypted transport enabled with `BTQ_DILITHIUM` (`0x2000000`) service flag.
+* **RPC (`18443`):** Bound strictly to `127.0.0.1`.
+* **ZeroMQ (`28332`, `28333`):** Bound strictly to `127.0.0.1` (`hashblock` and `hashtx`).
+* **Dashboard (`4000`):** Bound strictly to `127.0.0.1`, tunneled locally via SSH.
+* **Clock Sync:** Link-local hardware NTP (`169.254.169.254`) synchronized via `chrony` (RMS offset $< 0.6$ ms).
+
+---
+
+## Tooling Overview
+
+### 1. `mesh_check.py`
+Connects via SSH to all nodes across the mesh and asserts cluster health via authenticated loopback RPC:
+* Asserts equal block heights across all nodes.
+* Asserts identical `bestblockhash` values.
+* Asserts each node has `unique_peers >= 3`.
+* Asserts binary version (`v0.5.0`) and clean Git revision parity (`022d466bdc29` or later).
+
+### 2. `probe.py`
+On-node ZeroMQ subscriber daemon capturing microsecond-level event arrivals.
+* **Subscriptions:** `hashblock` (port `28332`), `hashtx` (port `28333`).
+* **Timestamping:** Hardware clock via `time.time_ns()`.
+* **Output:** Appends JSONL records to `/home/ubuntu/{node_id}_probe.jsonl`.
+* **Schema:**
+  ```json
+  {"n": "node1", "t_ns": 1794169447620296066, "topic": "hashblock", "id": "1091529d...", "seq": 33, "gap": false}
