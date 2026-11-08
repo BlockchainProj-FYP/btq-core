@@ -8,6 +8,31 @@ remaining limitations.
 See [CHECKPOINTS.md](CHECKPOINTS.md) for the latest completed task and next task.
 See [LOCAL_RUN.md](LOCAL_RUN.md) for the first isolated three-node schedule.
 
+## Four-VM block-arrival smoke run
+
+`block_probe.py` subscribes to each node's loopback ZMQ `hashblock` publisher
+and writes a private, run-tagged JSONL file with the block hash, node-local
+timestamp, sequence number, and gap flag. Install `deploy/requirements.txt`
+in each VM's `.venv` and pull the same deployment code there. The probe does
+not change `btqd.service` or expose ZMQ to the internet.
+
+After the isolated probed run passes, run `deploy/mesh_probe_run.py` **only on
+node1 (VM 145)**. It checks the current four-node mesh and chrony status,
+starts one local probe on each active VM through SSH, mines **one block on the
+existing production regtest chain**, collects all four event files, and checks
+the mesh again. It writes private results under
+`~/btq-mesh-probe-runs/run-*/` on node1. Its first-pass timing gate requires
+normal chrony leap status and both system offset and root dispersion under
+5 ms before mining and after the run. Inspect `manifest.json`, the four
+`node*-blocks.jsonl` files, and `block_arrivals.csv` locally. Treat the CSV as
+a timing smoke test, not a calibrated propagation dataset. Do not commit raw
+run directories or their host configuration.
+
+```bash
+cd ~/btq-core
+.venv/bin/python deploy/mesh_probe_run.py
+```
+
 ## Run the checker
 
 Install `deploy/requirements.txt` in a local virtual environment, ensure SSH access
