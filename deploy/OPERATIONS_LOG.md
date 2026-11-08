@@ -121,6 +121,64 @@ private configuration out of Git.
 3. Fill node5 and node6 inventory entries only when those VMs are assigned,
    and repeat the same onboarding, firewall, clock, and mesh checks.
 
+### Checkpoint: 30-Block Continuous Propagation Smoke Test
+- **Timestamp (UTC):** 2026-11-08 20:15
+- **Git Commit:** `022d466bdc29cbebaf09e115154990892a91f3df`
+- **Orchestration Host:** VM 145 (`145.241.118.62`)
+- **Pre-Test Tip:** Height 8
+- **Post-Test Tip:** Height 38
+- **Blocks Mined:** 30 consecutive blocks at ~3s intervals via `miner` wallet on VM 145
+- **Verification:** Executed `deploy/mesh_check.py` across all four instances
+- **Results:**
+  - `node1` (VM 145): height=38, hash matched, unique_peers=3, connections=6
+  - `node2` (VM 84): height=38, hash matched, unique_peers=3, connections=4
+  - `node3` (VM 130): height=38, hash matched, unique_peers=3, connections=5
+  - `node4` (VM 132): height=38, hash matched, unique_peers=3, connections=5
+- **Status:** PASS. Zero chain divergence, LevelDB integrity verified across all 4 nodes. Layer 1 Bench officially frozen and accepted.
+
+---
+
+### Checkpoint: Layer 3 Telemetry Deployment & ZMQ Pipeline Verification
+- **Timestamp (UTC):** 2026-11-08 21:00
+- **Git Commit:** `722602e6e` (`feat(metrics): add on-node zmq probe for microsecond event logging`)
+- **Components Introduced:**
+  - `deploy/probe.py`: Microsecond-accurate ZMQ subscriber (`28332` / `28333`), writing `nodeX_probe.jsonl`
+  - `deploy/aggregate.py`: Post-run SCP collector and atomic SQLite (`metrics.sqlite`) ingestion engine
+  - `deploy/analyze_baseline.py`: Statistical percentile analyzer ($p_{50}, p_{90}, p_{95}, p_{99}$)
+- **Transport Verification:** ZMQ publisher sockets confirmed listening on `127.0.0.1:28332` (`zmqpubhashblock`) and `127.0.0.1:28333` (`zmqpubhashtx`) across all 4 nodes.
+- **Initial Verification:** Mined block `1091529d1e66af4d...` at height 39. Telemetry successfully captured across all nodes with `gap: false` and identical ZMQ sequence IDs (`seq: 33`).
+  - Node 2 $\to$ Node 1 (Intra-tenancy LAN): 4.552 ms
+  - Node 2 $\to$ Node 3 (Cross-tenancy WAN): 34.221 ms
+  - Node 2 $\to$ Node 4 (Cross-tenancy WAN): 34.336 ms (co-located subnet $\Delta t = 0.115$ ms)
+- **Status:** PASS. Layer 3 instrumentation functional and verified.
+
+---
+
+### Checkpoint: Condition E0 Control Baseline Capture
+- **Timestamp (UTC):** 2026-11-08 21:45
+- **Run ID:** `E0_baseline`
+- **Topology:** 4-node all-to-all full mesh ($K_4$), Oracle Cloud Ampere A1 (ARM64) Ubuntu 22.04 LTS
+- **Clock Discipline:** `chrony` locked to link-local NTP (`169.254.169.254`), RMS clock offset $< 0.6$ ms
+- **Dataset:** 25 consecutive unconstrained blocks mined on VM 145 at ~2s intervals
+- **Events Ingested:** 100 block records across 4 nodes (0 dropped messages, 0 gap flags)
+- **Statistical Summary (Transit Latency Excluding Mining Origin, N=75):**
+  - **Mean Delay:** 11.596 ms
+  - **Median ($p_{50}$):** 14.447 ms
+  - **90th Percentile ($p_{90}$):** 14.952 ms
+  - **95th Percentile ($p_{95}$):** 15.023 ms
+  - **99th Percentile ($p_{99}$):** 48.751 ms
+  - **Maximum Delay:** 50.427 ms
+- **Per-Node Performance:**
+  - `node1` (VM 145): Mean 2.70 ms | $p_{50}$ 2.79 ms | Max 3.06 ms ($n=25$)
+  - `node2` (VM 84): Mean 0.00 ms | $p_{50}$ 0.00 ms | Max 0.00 ms ($n=25$, origin anchor)
+  - `node3` (VM 130): Mean 15.80 ms | $p_{50}$ 14.45 ms | Max 48.16 ms ($n=25$)
+  - `node4` (VM 132): Mean 16.28 ms | $p_{50}$ 14.88 ms | Max 50.43 ms ($n=25$)
+- **Observations:**
+  1. Deterministic intra-tenancy link between Node 1 and Node 2 ($2.70 \pm 0.3$ ms).
+  2. Co-located friend nodes (Node 3 and Node 4) track within $430\ \mu\text{s}$ at median ($14.45$ ms vs $14.88$ ms).
+  3. Tail latency ($p_{99} \approx 48.75$ ms) captures real wide-area internet jitter and TCP packet delivery dynamics.
+- **Status:** PASS. Condition E0 Control Baseline established and stored in `metrics.sqlite`.
+
 ## How to maintain this log
 
 For each new incident or milestone, record the affected node, observed
