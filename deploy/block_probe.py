@@ -48,7 +48,7 @@ def main():
                 seq = int.from_bytes(frames[2], "little")
                 record = {
                     "run_id": args.run_id, "node": args.node,
-                    "topic": "hashblock", "hash": frames[1][::-1].hex(),
+                    "topic": "hashblock", "hash": frames[1].hex(),
                     "t_unix_ns": time.time_ns(), "t_monotonic_ns": time.monotonic_ns(),
                     "seq": seq, "gap": last_seq is not None and seq != (last_seq + 1) % (2**32),
                 }
