@@ -4,14 +4,17 @@
 BTQ Core regtest processes on one host, each with a fresh private data
 directory. P2P and RPC ports bind to loopback and do not touch the existing
 four-VM chain. It saves the seed, planned schedule, source identity, binary
-hash, individual block events, and final chain tips under `~/btq-local-runs`.
+hash, individual block events, on-node ZMQ block-arrival events, clock tracking
+before and after, a preliminary arrival table, and final chain tips under
+`~/btq-local-runs`.
 Each of the three local node pairs has one configured dial direction, avoiding
 duplicate sessions while retaining a complete three-node mesh.
 
 This is a process-based local cluster on one VM, not the planned Docker
 cluster. Its `poll_convergence_ms` field includes sequential CLI polling and
-must not be used as a scientific propagation measurement. On-node event
-probes and clock validation come later. The exponential schedule is a
+must not be used as a scientific propagation measurement. The ZMQ probes
+timestamp events on each node, but this same-host smoke run does not validate
+cross-VM clock alignment or measure the real mesh. The exponential schedule is a
 provisional workload choice; freeze the experiment spec before reporting
 comparative results.
 
@@ -32,10 +35,13 @@ python3 deploy/local_run.py --seed 7 --duration 20 --mean-interval 4 --execute
 ```
 
 The command prints the run directory. Inspect its `manifest.json`,
-`schedule.json`, and `events.jsonl`; the node directories also contain each
-node's logs and wallet. Keep the entire run directory private because node
-configs contain credentials. Confirm `status` is `complete` and all three
-`final_tips` match.
+`schedule.json`, `events.jsonl`, `node*-blocks.jsonl`, and
+`block_arrivals.csv`; the node directories also contain each node's logs and
+wallet. Keep the entire run directory private because node configs contain
+credentials. Confirm `status` is `complete`, `probe_summary.blocks_per_node`
+matches `planned_blocks`, and all three `final_tips` match. A mismatch or ZMQ
+sequence gap makes the run fail. The table is only a preliminary arrival-delay
+view: zero is the first probe timestamp for each block.
 
 After the short run works, the proposed first 10-minute baseline is:
 

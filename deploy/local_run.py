@@ -17,6 +17,7 @@ import uuid
 
 P2P_BASE = 19550
 RPC_BASE = 18550
+ZMQ_BASE = 28550
 NODE_COUNT = 3
 
 
@@ -58,6 +59,53 @@ def schedule(seed, duration, mean_interval):
 
 def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def clock_tracking():
+    try:
+        result = subprocess.run(["chronyc", "tracking"], capture_output=True,
+                                text=True, timeout=5, check=False)
+        return {"exit_code": result.returncode,
+                "output": result.stdout.strip() if result.returncode == 0 else result.stderr.strip(),
+                "observed_at_unix_ns": time.time_ns()}
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"error": str(exc), "observed_at_unix_ns": time.time_ns()}
+
+
+def wait_ready(paths, processes, timeout=10):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(proc.poll() is not None for proc in processes):
+            raise RuntimeError("block probe exited before becoming ready")
+        if all(path.exists() for path in paths):
+            return
+        time.sleep(0.1)
+    raise TimeoutError("block probes did not become ready")
+
+
+def verify_probes(run_dir, events_path):
+    mined = [json.loads(line)["block_hash"] for line in events_path.read_text().splitlines()]
+    rows = []
+    for index in range(NODE_COUNT):
+        path = run_dir / f"node{index+1}-blocks.jsonl"
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        if any(row["gap"] for row in records):
+            raise RuntimeError(f"ZMQ sequence gap on node{index+1}")
+        observed = [row["hash"] for row in records]
+        if observed != mined:
+            raise RuntimeError(f"block probe on node{index+1} did not record every mined hash in order")
+        rows.append(records)
+    delays = []
+    with (run_dir / "block_arrivals.csv").open("w") as stream:
+        stream.write("block_hash,node,arrival_unix_ns,delay_from_first_ms\n")
+        for events in zip(*rows):
+            first = min(row["t_unix_ns"] for row in events)
+            for row in events:
+                delay_ms = (row["t_unix_ns"] - first) / 1_000_000
+                delays.append(delay_ms)
+                stream.write(f'{row["hash"]},{row["node"]},{row["t_unix_ns"]},{delay_ms:.6f}\n')
+    return {"blocks_per_node": len(mined), "nodes": NODE_COUNT,
+            "arrival_rows": len(delays), "max_delay_from_first_ms": max(delays, default=0)}
 
 
 def wait_rpc(cli_bin, datadir, process, timeout=30):
@@ -107,7 +155,8 @@ def make_config(datadir, index):
         "dnsseed=0", f"bind=127.0.0.1:{P2P_BASE+index}",
         f"port={P2P_BASE+index}", f"rpcport={RPC_BASE+index}",
         "rpcbind=127.0.0.1", "rpcallowip=127.0.0.1", "rpcuser=localrun",
-        f"rpcpassword={secrets.token_hex(24)}", "fallbackfee=0.0001", *peers, "",
+        f"rpcpassword={secrets.token_hex(24)}", "fallbackfee=0.0001",
+        f"zmqpubhashblock=tcp://127.0.0.1:{ZMQ_BASE+index}", *peers, "",
     ])
     path = datadir / "btq.conf"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -117,12 +166,15 @@ def make_config(datadir, index):
 
 def execute(run_dir, manifest, schedule_items, btqd, btqcli):
     processes = []
+    probes = []
     logs = []
+    probe_logs = []
     datadirs = []
     events_path = run_dir / "events.jsonl"
     try:
         manifest["status"] = "running"
         manifest["started_at_unix_ns"] = time.time_ns()
+        manifest["clock_before"] = clock_tracking()
         write_json(run_dir / "manifest.json", manifest)
         for index in range(NODE_COUNT):
             datadir = run_dir / f"node{index+1}"
@@ -139,6 +191,22 @@ def execute(run_dir, manifest, schedule_items, btqd, btqcli):
         for datadir, process in zip(datadirs, processes):
             wait_rpc(btqcli, datadir, process)
         wait_peers(btqcli, datadirs)
+        ready_paths = []
+        for index in range(NODE_COUNT):
+            node = f"node{index+1}"
+            ready = run_dir / f"{node}-probe.ready"
+            ready_paths.append(ready)
+            probe_log = (run_dir / f"{node}-probe.log").open("w")
+            probe_logs.append(probe_log)
+            probes.append(subprocess.Popen(
+                [sys.executable, str(Path(__file__).with_name("block_probe.py")),
+                 "--node", node, "--run-id", run_dir.name,
+                 "--endpoint", f"tcp://127.0.0.1:{ZMQ_BASE+index}",
+                 "--output", str(run_dir / f"{node}-blocks.jsonl"),
+                 "--ready", str(ready)],
+                stdout=probe_log, stderr=subprocess.STDOUT, start_new_session=True,
+            ))
+        wait_ready(ready_paths, probes)
         rpc_json(btqcli, datadirs[0], "createwallet", "miner")
         address = cli(btqcli, datadirs[0], "-rpcwallet=miner", "getnewaddress")
         # The first node mines. The other two must receive each block through P2P.
@@ -154,6 +222,12 @@ def execute(run_dir, manifest, schedule_items, btqd, btqcli):
                          "block_hash": block_hash, "poll_convergence_ms": convergence_ms}
                 events.write(json.dumps(event) + "\n")
                 events.flush()
+        time.sleep(0.5)
+        for probe in probes:
+            probe.terminate()
+            if probe.wait(timeout=5) != 0:
+                raise RuntimeError("block probe exited with an error")
+        manifest["probe_summary"] = verify_probes(run_dir, events_path)
         tips = [rpc_json(btqcli, d, "getblockchaininfo") for d in datadirs]
         manifest["final_tips"] = [{"height": t["blocks"], "hash": t["bestblockhash"]} for t in tips]
         manifest["status"] = "complete"
@@ -163,6 +237,15 @@ def execute(run_dir, manifest, schedule_items, btqd, btqcli):
         raise
     finally:
         manifest["finished_at_unix_ns"] = time.time_ns()
+        manifest["clock_after"] = clock_tracking()
+        for probe in probes:
+            if probe.poll() is None:
+                probe.terminate()
+                try:
+                    probe.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    probe.kill()
+                    probe.wait()
         for datadir in datadirs:
             try:
                 cli(btqcli, datadir, "stop")
@@ -179,6 +262,8 @@ def execute(run_dir, manifest, schedule_items, btqd, btqcli):
                     process.kill()
                     process.wait()
         for log in logs:
+            log.close()
+        for log in probe_logs:
             log.close()
         write_json(run_dir / "manifest.json", manifest)
 
@@ -200,7 +285,8 @@ def main():
         if not btqd.is_file() or not btqcli.is_file():
             parser.error("built src/btqd and src/btq-cli are required for --execute")
         busy = [p for p in (*range(P2P_BASE, P2P_BASE+NODE_COUNT),
-                            *range(RPC_BASE, RPC_BASE+NODE_COUNT)) if not available(p)]
+                            *range(RPC_BASE, RPC_BASE+NODE_COUNT),
+                            *range(ZMQ_BASE, ZMQ_BASE+NODE_COUNT)) if not available(p)]
         if busy:
             parser.error(f"local ports are busy: {busy}")
     root = args.output_root.expanduser().resolve()
@@ -214,6 +300,7 @@ def main():
         "mean_interval_seconds": args.mean_interval, "distribution": "seeded-exponential",
         "planned_blocks": len(items), "p2p_ports": list(range(P2P_BASE, P2P_BASE+NODE_COUNT)),
         "rpc_ports": list(range(RPC_BASE, RPC_BASE+NODE_COUNT)),
+        "zmq_ports": list(range(ZMQ_BASE, ZMQ_BASE+NODE_COUNT)),
         "source_revision": command(["git", "-C", str(source_root), "rev-parse", "HEAD"]),
         "source_tree": command(["git", "-C", str(source_root), "rev-parse", "HEAD:src"]),
         "status": "planned",
