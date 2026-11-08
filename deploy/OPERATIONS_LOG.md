@@ -11,13 +11,11 @@ private configuration out of Git.
 - Four Oracle VMs run BTQ Core regtest: Hussain's nodes at `145.241.118.62`
   (node1) and `84.235.244.35` (node2), and Abyaan's nodes at
   `130.210.56.76` (node3) and `132.226.188.199` (node4).
-- The four-node checker passed after reboot tests. All nodes reported height 5,
-  best block hash
+- The four-node checker passed after the isolated 10-minute run. All nodes
+  reported height 5, best block hash
   `667dae19063fd494b36fbca79b2da46431f0b116dd36a73ad0e0432d1cce5a0e`,
-  repository revision `869926f64c61d428b69d35d833da7f1d71893f02`, and all
-  three expected remote VM IPs as unique peers. The running binary was built
-  before the deployment-only revision; the later revision did not change core
-  code.
+  identical core source tree and binary version, and all three expected
+  remote VM IPs as unique peers. Documentation revisions differ across VMs.
 - `btqd` and chrony are enabled as systemd services on all four VMs. Nodes
   have `txindex=1`, `fallbackfee=0.0001`, microsecond log timestamps,
   `debug=bench`, and loopback-only ZMQ publishers. RPC is loopback-only on
@@ -25,10 +23,18 @@ private configuration out of Git.
   4000 where running.
 - Each node has persistent `addnode` entries for the other three VMs. The
   four-node checker verifies unique peer IPs, matching chain tips, and matching
-  source revisions. `deploy/addressing.yaml` is the shared inventory.
+  core source trees and binary version strings. `deploy/addressing.yaml` is
+  the shared inventory.
 - A block mined on node1 propagated to all four nodes (height 4). A block
   mined on node3 propagated to all four nodes (height 5). These are smoke
   tests, not research-grade propagation latency measurements.
+- A separate three-process local regtest cluster on VM 145 completed both a
+  short seeded run (12 planned and recorded blocks) and a 10-minute seeded
+  run (143 planned and recorded blocks). In the longer run, all three local
+  tips matched at height 143 and hash
+  `7b01437650e36c600f387ae0dd608738756d6d59a01c781c923ca87b1637f744`.
+  Only the production daemon remained afterward; the four-VM chain stayed at
+  height 5.
 - VM 84's dashboard source snapshot is installed at
   `~/Frontend/btq-dashboard`. Its proxy is now a boot-managed systemd service,
   bound to `127.0.0.1:4000`. It returned HTTP 200 and RPC height 5 after a
@@ -69,6 +75,9 @@ private configuration out of Git.
 | Reboot of node1 removed its previous broad P2P host rule | The original TCP 19444 rule had not been saved. | Replaced it with three `/32` peer-specific rules, ran `netfilter-persistent save`, rebooted again, and confirmed the rules and full mesh persisted. |
 | VM 84 dashboard stopped after VM reboot | Its server was launched as a process, not a boot-managed service. | Added `btq-dashboard.service` to the private Frontend repository and installed it on VM 84. After a reboot, the service was active, API and RPC reported height 5, frontend returned HTTP 200, and port 4000 listened only on 127.0.0.1. |
 | Checker rejected documentation-only repository drift | Nodes had pulled successive operations-log commits, so `git rev-parse HEAD` differed even though BTQ core source and binary version were unchanged. | Changed the checker to report each revision but compare the core `src` tree and binary version string. A live four-node check passed with matching height 5, hash, source tree, version string, and three expected peers per node despite differing repository revisions. This is not a binary attestation. |
+| First isolated local run did not establish all saved peer links | Configuring every local node to dial every other node created duplicate inbound/outbound sessions; `getaddednodeinfo` could report one redundant dial disconnected although other links were active. | Configured only one dial per node pair and disabled onion listening. A subsequent short run completed with 12 blocks and matching tips. |
+| A 10-minute run initially failed its port preflight | TCP sockets from the short run temporarily made some fixed loopback ports appear busy, although no extra daemon remained. | Set `SO_REUSEADDR` in the preflight check and moved port validation before creation of a run directory. The next 10-minute run started. |
+| The 10-minute run's SSH session ended before verification | The SSH client reported that VM 145 was not responding. The run's private directory had been observed with a running manifest and recorded events, but completion was not observed through that session. | A later SSH check found manifest `complete`, 143 of 143 event records, three matching local tips at height 143, no remaining local daemons, and a production four-node checker `PASS` at height 5. |
 
 ## Repository and configuration decisions
 
@@ -77,9 +86,10 @@ private configuration out of Git.
   `deploy/mesh_check.py`, and instructions. The newer configuration renderer
   and unit template are in this directory.
 - Private dashboard repository: `BlockchainProj-FYP/Frontend`, `main` at
-  `070ebf4` when last verified. Keep dashboard code there; keep BTQ node
-  configuration, mesh checks, and experiment infrastructure with the core fork
-  until a separate testbed repository is created.
+  least through `d7e89db` when the VM 84 service template was added. Keep
+  dashboard code there; keep BTQ node configuration, mesh checks, and
+  experiment infrastructure with the core fork until a separate testbed
+  repository is created.
 - Do not push `~/.btq/btq.conf`, `server/.env`, SSH keys, wallet directories,
   node data, or RPC history. The committed renderer makes a private candidate
   config and preserves each node's own credentials.
@@ -96,9 +106,10 @@ private configuration out of Git.
 
 1. Review the OCI ingress rules for TCP 19444 and document the remaining
    direction-dependent connection behavior. Keep RPC and ZMQ private.
-2. Build the first reproducible 10-minute block schedule and result manifest:
-   source revision, node list, seed, actions, clock status, block hashes, and
-   checker outcome. Then add on-node event probes for actual timing metrics.
+2. Add on-node event probes and clock-quality records for actual timing
+   metrics. The completed local runner saves source revision, binary hash,
+   seed, schedule, block events, and final tips, but its sequential CLI
+   polling is not a propagation-latency measurement.
 3. Fill node5 and node6 inventory entries only when those VMs are assigned,
    and repeat the same onboarding, firewall, clock, and mesh checks.
 
