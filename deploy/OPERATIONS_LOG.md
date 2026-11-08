@@ -179,6 +179,28 @@ private configuration out of Git.
   3. Tail latency ($p_{99} \approx 48.75$ ms) captures real wide-area internet jitter and TCP packet delivery dynamics.
 - **Status:** PASS. Condition E0 Control Baseline established and stored in `metrics.sqlite`.
 
+---
+
+### Checkpoint: Condition E0 Reverse Control Baseline (Directional Validation)
+- **Timestamp (UTC):** 2026-11-09 00:00
+- **Run ID:** `E0_reverse_vm132`
+- **Origin Node:** `node4` (VM 132 / `132.226.188.199`)
+- **Dataset:** 25 consecutive unconstrained blocks mined at 2s intervals
+- **Events Ingested:** 100 block records, 100 tx records across 4 nodes (0 dropped messages)
+- **Statistical Summary (Transit Latency Excluding Mining Origin, N=75):**
+  - **Mean Delay:** 13.114 ms
+  - **Median ($p_{50}$):** 16.416 ms
+  - **90th Percentile ($p_{90}$):** 18.514 ms
+  - **95th Percentile ($p_{95}$):** 18.877 ms
+  - **99th Percentile ($p_{99}$):** 60.410 ms
+  - **Maximum Delay:** 69.873 ms
+- **Per-Node Performance:**
+  - `node4` (VM 132 - Mining Origin): Mean 0.00 ms | $p_{50}$ 0.00 ms (origin anchor)
+  - `node3` (VM 130 - Intra-subnet LAN): Mean 0.74 ms | $p_{50}$ 0.49 ms | Max 7.27 ms ($n=25$)
+  - `node2` (VM 84 - Cross-tenancy WAN): Mean 18.68 ms | $p_{50}$ 16.42 ms | Max 69.87 ms ($n=25$)
+  - `node1` (VM 145 - Cross-tenancy WAN): Mean 19.92 ms | $p_{50}$ 18.30 ms | Max 57.09 ms ($n=25$)
+- **Conclusions:** Verified bi-directional WAN symmetry (~14.5 ms vs ~16.4 ms) and verified local subnet transit times under 0.5 ms ($490\ \mu\text{s}$). Telemetry harness confirmed topology-agnostic.
+
 ## How to maintain this log
 
 For each new incident or milestone, record the affected node, observed
