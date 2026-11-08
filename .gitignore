@@ -164,3 +164,8 @@ build-native-linux/
 build-static-linux/
 build-win64/
 build-linux/
+
+# Telemetry and probe data
+*.jsonl
+*.sqlite
+results/
